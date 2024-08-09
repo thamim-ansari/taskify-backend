@@ -280,10 +280,11 @@ app.post("/tasks/", authenticateToken, async (request, response) => {
 // Route to get all tasks with optional search query
 app.get("/tasks/", authenticateToken, async (request, response) => {
   try {
-    const { search_q = "" } = request.query;
+    // Extract search query and status from the request query parameters
+    const { search_q = "", status = "" } = request.query;
 
-    // Fetch all tasks with optional search filter
-    const getAllTasksQuery = ` SELECT 
+    // Base SQL query to fetch tasks with joins on users and projects
+    let getAllTasksQuery = `SELECT 
         tasks.task_id, 
         tasks.task_title, 
         tasks.task_description, 
@@ -298,13 +299,28 @@ app.get("/tasks/", authenticateToken, async (request, response) => {
       FROM tasks
       JOIN users ON tasks.user_id = users.user_id
       JOIN projects ON tasks.project_id = projects.project_id
-      WHERE task_title LIKE ?
-      ORDER BY task_id DESC`;
-    const allTaskData = await db.all(getAllTasksQuery, [`%${search_q}%`]);
-    response.status(200).json(allTaskData);
+      WHERE task_title LIKE ?`;
+
+    // Initialize query parameters with the search term
+    const queryParams = [`%${search_q}%`];
+
+    // Append additional filter if status is provided
+    if (status) {
+      getAllTasksQuery += " AND task_status = ?";
+      queryParams.push(status);
+    }
+
+    // Append order by clause to the query
+    getAllTasksQuery += " ORDER BY task_id DESC";
+
+    // Execute the query and fetch the data
+    const allTaskData = await db.all(getAllTasksQuery, queryParams);
+    response.status(200).json(allTaskData); // Send fetched data as JSON response
   } catch (error) {
-    console.error("Error:", error);
-    response.status(500).json({ message: "Internal server error" });
+    console.error("Error executing query:", error.message); // Log the error
+    response
+      .status(500)
+      .json({ message: "Internal server error", error: error.message }); // Send error response
   }
 });
 
